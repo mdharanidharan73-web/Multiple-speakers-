@@ -9,7 +9,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+// Robolectric 4.16.1 provides stable Android 15 (API 35) shadows.
+// API 36 is not supported by this test dependency and throws UnsupportedOperationException.
+@Config(sdk = [35])
 class ExampleRobolectricTest {
 
   @Test
