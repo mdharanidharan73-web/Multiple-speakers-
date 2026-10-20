@@ -1,0 +1,6 @@
+{
+  "name": "DualSync Audio",
+  "description": "Multi Bluetooth Speaker Player that plays across two speakers when genuine dual output is supported, with honest diagnostics and alternatives.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
