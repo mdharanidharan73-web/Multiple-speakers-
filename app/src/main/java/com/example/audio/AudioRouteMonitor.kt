@@ -13,13 +13,18 @@ import kotlinx.coroutines.flow.asStateFlow
 interface AudioRouteMonitor {
     val activeOutputRoutes: StateFlow<List<AudioRouteInfo>>
     val activeBluetoothOutputs: StateFlow<List<AudioRouteInfo>>
+    val confirmedRoutedDevice: StateFlow<AudioRouteInfo?>
+    val lastRouteUpdateTime: StateFlow<Long>
+    val isPlaybackActive: StateFlow<Boolean>
+
+    fun setConfirmedRoutedDevice(device: AudioDeviceInfo?, isPlaying: Boolean)
     fun refreshRoutes()
     fun release()
 }
 
 class AudioRouteMonitorImpl(
     private val context: Context,
-    private val onRoutesChangedListener: ((List<AudioRouteInfo>) -> Unit)? = null
+    private val onRoutesChangedListener: ((List<AudioRouteInfo>, AudioRouteInfo?) -> Unit)? = null
 ) : AudioRouteMonitor {
 
     private val audioManager: AudioManager =
@@ -31,48 +36,99 @@ class AudioRouteMonitorImpl(
     private val _activeBluetoothOutputs = MutableStateFlow<List<AudioRouteInfo>>(emptyList())
     override val activeBluetoothOutputs: StateFlow<List<AudioRouteInfo>> = _activeBluetoothOutputs.asStateFlow()
 
+    private val _confirmedRoutedDevice = MutableStateFlow<AudioRouteInfo?>(null)
+    override val confirmedRoutedDevice: StateFlow<AudioRouteInfo?> = _confirmedRoutedDevice.asStateFlow()
+
+    private val _lastRouteUpdateTime = MutableStateFlow(System.currentTimeMillis())
+    override val lastRouteUpdateTime: StateFlow<Long> = _lastRouteUpdateTime.asStateFlow()
+
+    private val _isPlaybackActive = MutableStateFlow(false)
+    override val isPlaybackActive: StateFlow<Boolean> = _isPlaybackActive.asStateFlow()
+
     private val audioDeviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+            _lastRouteUpdateTime.value = System.currentTimeMillis()
             refreshRoutes()
         }
 
         override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+            _lastRouteUpdateTime.value = System.currentTimeMillis()
             refreshRoutes()
         }
     }
 
     init {
-        audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
+        try {
+            audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
+        } catch (_: Exception) {}
+        refreshRoutes()
+    }
+
+    override fun setConfirmedRoutedDevice(device: AudioDeviceInfo?, isPlaying: Boolean) {
+        _isPlaybackActive.value = isPlaying
+        _lastRouteUpdateTime.value = System.currentTimeMillis()
+
+        if (device != null) {
+            val mapped = mapDeviceInfo(device, isRouted = true)
+            _confirmedRoutedDevice.value = mapped
+        } else {
+            _confirmedRoutedDevice.value = null
+        }
         refreshRoutes()
     }
 
     override fun refreshRoutes() {
-        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        val routeList = devices.map { device ->
-            mapDeviceInfo(device)
-        }
+        try {
+            val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            val currentRouted = _confirmedRoutedDevice.value
 
-        _activeOutputRoutes.value = routeList
-        val btList = routeList.filter { it.isBluetooth && it.isSink }
-        _activeBluetoothOutputs.value = btList
-        onRoutesChangedListener?.invoke(btList)
+            val routeList = devices.map { device ->
+                val isRouted = if (currentRouted != null) {
+                    (currentRouted.id == device.id) ||
+                            (!currentRouted.address.isNullOrBlank() && currentRouted.address == getDeviceAddressSafe(device))
+                } else {
+                    false
+                }
+                mapDeviceInfo(device, isRouted = isRouted)
+            }
+
+            _activeOutputRoutes.value = routeList
+            val btList = routeList.filter { it.isBluetooth && it.isSink }
+            _activeBluetoothOutputs.value = btList
+            onRoutesChangedListener?.invoke(btList, _confirmedRoutedDevice.value)
+        } catch (_: SecurityException) {
+            // Handled safely without crashing
+        } catch (_: Exception) {}
     }
 
-    private fun mapDeviceInfo(info: AudioDeviceInfo): AudioRouteInfo {
+    private fun getDeviceAddressSafe(info: AudioDeviceInfo): String? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                info.address
+            } else {
+                null
+            }
+        } catch (_: SecurityException) {
+            null
+        }
+    }
+
+    private fun mapDeviceInfo(info: AudioDeviceInfo, isRouted: Boolean = false): AudioRouteInfo {
         val type = info.type
         val isBt = isBluetoothDeviceType(type)
         val isBle = isBleDeviceType(type)
         val typeName = getDeviceTypeName(type)
-        val name = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            info.productName?.toString() ?: typeName
-        } else {
+        val name = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                info.productName?.toString() ?: typeName
+            } else {
+                typeName
+            }
+        } catch (_: SecurityException) {
             typeName
         }
-        val address = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            info.address
-        } else {
-            null
-        }
+
+        val address = getDeviceAddressSafe(info)
 
         return AudioRouteInfo(
             id = info.id,
@@ -82,7 +138,8 @@ class AudioRouteMonitorImpl(
             isBluetooth = isBt,
             isBle = isBle,
             isSink = info.isSink,
-            address = address
+            address = address,
+            isCurrentlyRouted = isRouted
         )
     }
 
@@ -93,7 +150,6 @@ class AudioRouteMonitorImpl(
             return true
         }
 
-        // Guard BLE Audio types by API level
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
                 type == AudioDeviceInfo.TYPE_BLE_SPEAKER

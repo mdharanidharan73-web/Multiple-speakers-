@@ -67,7 +67,23 @@ class DualOutputCheckerTest {
 
         val samsungResult = samsungChecker.checkDualOutputSupport(routes)
         assertTrue(samsungResult.oemFeatureName.contains("Samsung Dual Audio"))
-        assertTrue(samsungResult.recommendation.contains("Media Output"))
+        assertTrue(samsungResult.recommendation.contains("second speaker"))
+
+        val samsungTwoDevices = samsungChecker.checkDualOutputSupport(
+            listOf(
+                routes[0],
+                AudioRouteInfo(
+                    id = 3,
+                    productName = "Sony SRS-XB13",
+                    type = AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                    typeName = "Bluetooth A2DP Speaker",
+                    isBluetooth = true,
+                    isBle = false,
+                    isSink = true
+                )
+            )
+        )
+        assertTrue(samsungTwoDevices.recommendation.contains("Media Output"))
 
         val xiaomiResult = xiaomiChecker.checkDualOutputSupport(routes)
         assertTrue(xiaomiResult.oemFeatureName.contains("Xiaomi Sound Assistant"))
@@ -98,10 +114,17 @@ class DualOutputCheckerTest {
             )
         )
 
-        val result = defaultChecker.checkDualOutputSupport(routes)
+        // When OEM Dual Audio is active
+        val result = defaultChecker.checkDualOutputSupport(routes, isOemDualAudioActive = true)
         assertTrue(result.isDualActive)
         assertEquals(2, result.activeCount)
         assertEquals(listOf("boAt Stone 650", "Sony SRS-XB13"), result.activeDeviceNames)
         assertEquals("Dual Output Active", result.statusTitle)
+
+        // When 2 devices connected but dual audio routing is unverified / pending
+        val unverifiedResult = defaultChecker.checkDualOutputSupport(routes, isOemDualAudioActive = false)
+        assertFalse(unverifiedResult.isDualActive)
+        assertEquals(2, unverifiedResult.availableCount)
+        assertTrue(unverifiedResult.statusTitle.contains("Routing Unverified"))
     }
 }

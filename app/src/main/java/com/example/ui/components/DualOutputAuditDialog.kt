@@ -112,7 +112,7 @@ fun DualOutputAuditDialog(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 if (auditResult.activeDeviceNames.isNotEmpty()) {
-                    auditResult.activeDeviceNames.forEach { name ->
+                    for (name in auditResult.activeDeviceNames) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(vertical = 2.dp)

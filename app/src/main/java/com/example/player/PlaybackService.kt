@@ -102,6 +102,18 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
+        exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                val app = application as? com.example.DualSyncApp
+                app?.container?.audioRouteMonitor?.setConfirmedRoutedDevice(null, isPlaying = isPlaying)
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                val app = application as? com.example.DualSyncApp
+                app?.container?.audioRouteMonitor?.refreshRoutes()
+            }
+        })
+
         activePlayer = exoPlayer
 
         val sessionActivityIntent = Intent(this, MainActivity::class.java)

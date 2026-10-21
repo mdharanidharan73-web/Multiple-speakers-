@@ -240,6 +240,7 @@ class BluetoothRepositoryImpl(
             address = address,
             bondState = bondState,
             connectionState = if (isConnected) ConnectionState.CONNECTED else ConnectionState.DISCONNECTED,
+            isAvailableAsOutput = isConnected,
             isAudioOutputActive = isOutputActive,
             brand = brand,
             batteryLevel = battery,

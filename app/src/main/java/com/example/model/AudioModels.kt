@@ -31,5 +31,6 @@ data class AudioRouteInfo(
     val isBluetooth: Boolean,
     val isBle: Boolean,
     val isSink: Boolean,
-    val address: String? = null
+    val address: String? = null,
+    val isCurrentlyRouted: Boolean = false
 )

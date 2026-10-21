@@ -49,7 +49,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val audioRouteMonitor: AudioRouteMonitor by lazy {
-        AudioRouteMonitorImpl(context) { activeRoutes ->
+        AudioRouteMonitorImpl(context) { activeRoutes, _ ->
             val addresses = activeRoutes.mapNotNull { it.address }.toSet()
             bluetoothRepository.updateActiveOutputAddresses(addresses)
         }
